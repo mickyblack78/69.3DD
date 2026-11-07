@@ -290,5 +290,27 @@
         for(let i=0; i<2; i++) { app.vaults[i] = localStorage.getItem('v'+i); if(app.vaults[i]) document.getElementById('vault-img-'+i).src = app.vaults[i]; }
         updateColor(); if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');
     };
+        if ('launchQueue' in window) {
+        window.launchQueue.setConsumer(async (lp) => {
+            if (lp.files && lp.files.length > 0) {
+                const f = await lp.files[0].getFile();
+                const r = new FileReader();
+                r.onload = ev => {
+                    const img = new Image();
+                    img.onload = () => {
+                        textObj.img = img;
+                        textObj.rot = -textObj.cRot;
+                        app.activeTool = 'TEXT_PLACE';
+                        document.getElementById('ui-transform-bar').style.display = 'flex';
+                        let sW = window.innerWidth / app.scale, sH = window.innerHeight / app.scale;
+                        textObj.scale = Math.max(sW / img.width, sH / img.height);
+                        drawTextPreview();
+                    };
+                    img.src = ev.target.result;
+                };
+                r.readAsDataURL(f);
+            }
+        });
+        }
 </script></body></html>
       
