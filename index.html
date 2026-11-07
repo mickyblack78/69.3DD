@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <link rel="manifest" href="manifest.json">
+    <title>STUDIO69 3D</title>
+    <style>
+        :root { --bg: #050505; --panel: rgba(15, 15, 15, 0.95); --border: #333; --neon: #00ffff; --active-bg: rgba(0, 255, 255, 0.1); }
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; touch-action: none; font-family: monospace; }
+        body { background: var(--bg); height: 100vh; width: 100vw; overflow: hidden; color: #666; }
+        #viewport { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform-origin: 0 0; }
+        canvas { position: absolute; top: 0; left: 0; display: block; }
+        #main-canvas { z-index: 10; }
+        #temp-canvas { z-index: 20; }
+        #mask-canvas { z-index: 30; pointer-events: none; }
+        .dock { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 96%; max-width: 500px; display: flex; justify-content: space-between; background: var(--panel); padding: 10px; border-radius: 40px; border: 1px solid var(--border); z-index: 9999; }
+        .dock-btn { flex: 1; height: 50px; margin: 0 4px; border-radius: 25px; border: 1px solid var(--border); background: #111; display: flex; align-items: center; justify-content: center; color: #888; font-size: 11px; font-weight: 900; transition: 0.2s; cursor: pointer; text-align: center; }
+        .active-btn { border-color: var(--neon) !important; color: var(--neon) !important; background: var(--active-bg); box-shadow: 0 0 15px rgba(0, 255, 255, 0.2); }
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9000; display: none; align-items: center; justify-content: center; flex-direction: column; }
+        .menu-box { background: var(--panel); border: 1px solid var(--border); padding: 20px; border-radius: 20px; width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 10px; }
+        .menu-row { display: flex; gap: 10px; width: 100%; }
+        .menu-item { flex: 1; height: 50px; background: #111; border: 1px solid var(--border); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #aaa; cursor: pointer; font-weight: bold; font-size: 10px; text-align: center; }
+        input[type="range"] { width: 100%; margin: 8px 0; -webkit-appearance: none; background: #222; height: 10px; border-radius: 5px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; background: #fff; border-radius: 50%; border: 2px solid #000; }
+        input[type="text"], select { width: 100%; height: 40px; background: #111; color: #fff; border: 1px solid #444; padding: 10px; margin-bottom: 10px; outline: none; }
+        #ui-transform-bar { display: none; position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 9999; gap: 10px; width: 90%; max-width: 450px; }
+        #tel-zone { position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:10000; color:var(--neon); font-size:10px; font-weight:bold; pointer-events:none; display:none; }
+        #btn-reset { position: fixed; top: 10px; right: 10px; z-index: 10000; width: 40px; height: 40px; background: rgba(0, 255, 255, 0.1); border: 1px solid var(--neon); color: var(--neon); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+  <body>
+    <div id="tel-zone">ISOLATED ZONE ACTIVE</div>
+    <div id="btn-reset" onclick="applyFitMath(main.width, main.height)">target</div>
+    <div id="viewport">
+        <canvas id="main-canvas"></canvas>
+        <canvas id="temp-canvas"></canvas>
+        <canvas id="mask-canvas"></canvas>
+    </div>
+    <div class="dock">
+        <div class="dock-btn" id="btn-menu" onclick="toggleOverlay('menu')">MENU</div>
+        <div class="dock-btn" id="btn-tools" onclick="toggleOverlay('tools')">TOOLS</div>
+        <div class="dock-btn" id="btn-zone" onclick="toggleOverlay('zone')">ZONE</div>
+        <div class="dock-btn" id="btn-color" onclick="toggleOverlay('color')">COLOR</div>
+        <div class="dock-btn" onclick="triggerQSave()">QSAVE</div>
+    </div>
+    <div class="overlay" id="overlay-menu">
+        <div class="menu-box">
+            <div class="menu-row">
+                <div class="menu-item" onclick="document.getElementById('load-file').click()">LOAD PIC</div>
+                <div class="menu-item" onclick="document.getElementById('import-file').click()">IMPORT</div>
+            </div>
+            <div class="menu-item" onclick="triggerSave()">EXPORT PNG</div>
+            <div class="menu-item" onclick="toggleOverlay('vault')">VAULTS</div>
+        </div>
+    </div>
+    <div class="overlay" id="overlay-tools">
+        <div class="menu-box">
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px;">
+                <div class="menu-item tool-btn" onclick="selectTool(this, 'PAINTBRUSH')">BRUSH</div>
+                <div class="menu-item tool-btn" onclick="selectTool(this, 'ERASER')">ERASER</div>
+                <div class="menu-item tool-btn" onclick="selectTool(this, 'PICKER')">PICKER</div>
+                <div class="menu-item tool-btn" onclick="selectTool(this, 'FILL')">FILL</div>
+                <div class="menu-item tool-btn" onclick="selectTool(this, 'ROTATE')">ROTATE</div>
+                <div class="menu-item tool-btn" onclick="selectTool(this, 'COPY')">COPY</div>
+                <div class="menu-item tool-btn" onclick="selectTool(this, 'PASTE')">PASTE</div>
+                <div class="menu-item tool-btn" onclick="selectTool(this, 'SMOOTH')">SMOOTH</div>
+                <div class="menu-item tool-btn" onclick="openTextMenu()">TEXT</div>
+                <div class="menu-item tool-btn" onclick="performUndo()">UNDO</div>
+                <div class="menu-item tool-btn" onclick="triggerAI()" style="color:#f0f;">AI</div>
+                <div class="menu-item tool-btn" onclick="performReflector()">MIRROR</div>
+            </div>
+        </div>
+    </div>
+    <div class="overlay" id="overlay-zone">
+        <div class="menu-box">
+            <div style="font-size:9px; color:var(--neon)">ZONE X: MIN / MAX</div>
+            <input type="range" id="sz-xmin" min="0" max="100" value="0" oninput="updateZonalMask()">
+            <input type="range" id="sz-xmax" min="0" max="100" value="100" oninput="updateZonalMask()">
+            <div style="font-size:9px; color:var(--neon)">ZONE Y: MIN / MAX</div>
+            <input type="range" id="sz-ymin" min="0" max="100" value="0" oninput="updateZonalMask()">
+            <input type="range" id="sz-ymax" min="0" max="100" value="100" oninput="updateZonalMask()">
+            <div class="menu-item" onclick="toggleOverlay(null)">CONFIRM</div>
+        </div>
+    </div>
+    <div class="overlay" id="overlay-color">
+        <div class="menu-box" style="align-items: center;">
+            <canvas id="brush-preview" width="80" height="80" style="border-radius: 50%; border: 2px solid #fff;"></canvas>
+            <div style="font-size:9px; width:100%; text-align:left; color:#888;">MASTER RAINBOW</div>
+            <input type="range" id="slider-hue" min="0" max="360" value="180" style="background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);" oninput="updateColor()">
+            <div style="font-size:9px; width:100%; text-align:left; color:#888;">SHADES</div>
+            <input type="range" id="slider-light" min="0" max="100" value="50" oninput="updateColor()">
+            <div style="font-size:9px; width:100%; text-align:left; color:#888;">BRUSH SIZE</div>
+            <input type="range" id="slider-size" min="1" max="100" value="20" oninput="updateColor()">
+            <div class="menu-item" onclick="toggleOverlay(null)">OK</div>
+        </div>
+    </div>
+    <div class="overlay" id="overlay-vault">
+        <div class="menu-box"><div class="menu-row">
+            <div class="menu-item" style="flex-direction:column; height:110px;" onclick="loadVault(0)"><img id="vault-img-0" style="width:100%; height:70px; object-fit:contain; background:#000;"><span>LOAD 1</span></div>
+            <div class="menu-item" style="flex-direction:column; height:110px;" onclick="loadVault(1)"><img id="vault-img-1" style="width:100%; height:70px; object-fit:contain; background:#000;"><span>LOAD 2</span></div>
+        </div></div>
+    </div>
+    <div class="overlay" id="overlay-text">
+        <div class="menu-box">
+            <input type="text" id="text-input" placeholder="Type here...">
+            <div style="font-size:9px; color:#888;">FONT STYLE</div>
+            <select id="text-font"><option value="monospace">Typewriter</option><option value="cursive">Script</option><option value="sans-serif">Bold</option></select>
+            <div style="font-size:9px; color:#888;">MANUAL SCALE</div>
+            <input type="range" id="text-scale-slider" min="0.1" max="5" step="0.01" value="1" oninput="textObj.scale = parseFloat(this.value); drawTextPreview();">
+            <div class="menu-row">
+                <div class="menu-item" onclick="startTextSticker()" style="color:var(--neon);">PLACE</div>
+                <div class="menu-item" onclick="toggleOverlay(null)">CANCEL</div>
+            </div>
+        </div>
+    </div>
+    <div id="ui-transform-bar">
+        <div class="dock-btn" onclick="textObj.fX *= -1; drawTextPreview();">FLIP X</div>
+        <div class="dock-btn" onclick="confirmTextSticker()" style="background:var(--neon); color:#000; font-weight:bold;">STAMP</div>
+        <div class="dock-btn" onclick="cancelTextSticker()" style="background:#333;">X</div>
+    </div>
+    <input type="file" id="load-file" style="display:none" accept="image/*">
+    <input type="file" id="import-file" style="display:none" accept="image/*">
+    <script>
+    const app = { activeTool: null, penColor: '#00ffff', penSize: 20, scale: 1, panX: 0, panY: 0, undo: [], vaults: [null, null], vIdx: 0 };
+    const main = document.getElementById('main-canvas'), temp = document.getElementById('temp-canvas'), mask = document.getElementById('mask-canvas'), viewport = document.getElementById('viewport');
+    const mctx = main.getContext('2d'), tctx = temp.getContext('2d'), msctx = mask.getContext('2d');
+    let textObj = { txt: '', font: '', img: null, scale: 1, rot: 0, fX: 1, fY: 1, cRot: 0, lastR: 0 };
+    let currentOpenMenu = null;
+    window.lassoPath = []; window.clipboard = null; window.smoothBuf = null;
+
+    function updateZonalMask() {
+        const w = mask.width, h = mask.height; msctx.clearRect(0,0,w,h);
+        const xmin = (document.getElementById('sz-xmin').value/100)*w, xmax = (document.getElementById('sz-xmax').value/100)*w;
+        const ymin = (document.getElementById('sz-ymin').value/100)*h, ymax = (document.getElementById('sz-ymax').value/100)*h;
+        document.getElementById('tel-zone').style.display = (xmin>0 || xmax<w || ymin>0 || ymax<h) ? 'block' : 'none';
+        msctx.fillStyle = 'rgba(5, 5, 5, 0.75)'; msctx.fillRect(0,0,w,h);
+        msctx.clearRect(xmin, ymin, xmax-xmin, ymax-ymin);
+        msctx.strokeStyle = 'rgba(0, 255, 255, 0.5)'; msctx.lineWidth = 2/app.scale; msctx.strokeRect(xmin, ymin, xmax-xmin, ymax-ymin);
+    }
+
+    function isInsideZone(x, y) {
+        const xmin = (document.getElementById('sz-xmin').value/100)*main.width, xmax = (document.getElementById('sz-xmax').value/100)*main.width;
+        const ymin = (document.getElementById('sz-ymin').value/100)*main.height, ymax = (document.getElementById('sz-ymax').value/100)*main.height;
+        return (x >= xmin && x <= xmax && y >= ymin && y <= ymax);
+    }
+
+    function updateColor() {
+        const h = document.getElementById('slider-hue').value, l = document.getElementById('slider-light').value;
+        app.penSize = parseInt(document.getElementById('slider-size').value);
+        app.penColor = `hsl(${h}, 100%, ${l}%)`;
+        document.getElementById('btn-color').style.background = app.penColor;
+        document.getElementById('btn-color').style.color = l > 50 ? '#000' : '#fff';
+        const pCtx = document.getElementById('brush-preview').getContext('2d');
+        pCtx.clearRect(0,0,80,80); pCtx.beginPath(); pCtx.arc(40,40,app.penSize/2,0,Math.PI*2); pCtx.fillStyle=app.penColor; pCtx.fill();
+    }
+
+    function rgbToHsl(r, g, b) {
+        r/=255; g/=255; b/=255; let max=Math.max(r,g,b), min=Math.min(r,g,b), h, s, l=(max+min)/2;
+        if(max===min) h=s=0; else { let d=max-min; s=l>0.5?d/(2-max-min):d/(max+min);
+        if(max===r) h=(g-b)/d+(g<b?6:0); else if(max===g) h=(b-r)/d+2; else h=(r-g)/d+4; h/=6; }
+        return { h: Math.round(h*360), l: Math.round(l*100) };
+    }
+
+    function updateViewport() { 
+        viewport.style.transform = `translate(${app.panX}px, ${app.panY}px) scale(${app.scale}) rotate(${textObj.cRot}deg)`; 
+        updateZonalMask(); 
+    }
+
+    function applyFitMath(w, h) {
+        main.width = temp.width = mask.width = w; main.height = temp.height = mask.height = h;
+        app.scale = Math.min(window.innerWidth/w, window.innerHeight/h);
+        app.panX = (window.innerWidth - w * app.scale)/2; app.panY = (window.innerHeight - h * app.scale)/2;
+        updateViewport();
+    }
+      let isDraw = false, isPan = false, dist = 0, px = 0, py = 0, lx = 0, ly = 0;
+    const getC = e => { 
+        const rect = temp.getBoundingClientRect(); 
+        const t = e.touches ? e.touches[0] : e;
+        const cos = Math.cos(-textObj.cRot * Math.PI / 180), sin = Math.sin(-textObj.cRot * Math.PI / 180);
+        const rx = (t.clientX - rect.left - (rect.width/2)), ry = (t.clientY - rect.top - (rect.height/2));
+        return { 
+            x: (rx * cos - ry * sin + (rect.width/2)) / app.scale, 
+            y: (rx * sin + ry * cos + (rect.height/2)) / app.scale 
+        }; 
+    };
+
+    viewport.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+            isPan = false; isDraw = false;
+            dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        } else if (e.touches.length === 1) {
+            const t = e.touches[0];
+            if (!app.activeTool) { 
+                isPan = true; lx = t.clientX; ly = t.clientY; px = app.panX; py = app.panY; 
+            } else {
+                const c = getC(e); if (!isInsideZone(c.x, c.y) && app.activeTool !== 'TEXT_PLACE') return;
+                isDraw = true; lx = c.x; ly = c.y;
+                if (app.activeTool === 'PICKER') executePicker(c);
+                else if (app.activeTool === 'FILL') floodFill(c.x, c.y);
+                else if (app.activeTool === 'ROTATE') textObj.lastR = t.clientX;
+                else if (app.activeTool === 'COPY') { window.lassoPath = [c]; updateZonalMask(); }
+                else if (app.activeTool === 'SMOOTH') {
+                    window.smoothBuf = document.createElement('canvas');
+                    window.smoothBuf.width = temp.width; window.smoothBuf.height = temp.height;
+                    const sx = window.smoothBuf.getContext('2d');
+                    sx.filter = 'blur(4px)'; sx.drawImage(temp, 0, 0);
+                }
+                else if (app.activeTool === 'PASTE' && window.clipboard) {
+                    tctx.putImageData(window.clipboard, c.x - window.clipboard.width/2, c.y - window.clipboard.height/2);
+                    pushUndo();
+                }
+            }
+        }
+      window.addEventListener('touchend', () => { 
+        isPan = false; 
+        if (isDraw) {
+            if (app.activeTool === 'COPY' && window.lassoPath.length > 3) {
+                const off = document.createElement('canvas'); off.width = main.width; off.height = main.height; const octx = off.getContext('2d');
+                octx.beginPath(); window.lassoPath.forEach((p, i) => i === 0 ? octx.moveTo(p.x, p.y) : octx.lineTo(p.x, p.y)); octx.closePath();
+                octx.clip(); octx.drawImage(temp, 0, 0);
+                window.clipboard = octx.getImageData(0,0, main.width, main.height);
+                window.lassoPath = []; updateZonalMask();
+            }
+            if (['PAINTBRUSH','ERASER','SMOOTH'].includes(app.activeTool)) pushUndo();
+        }
+        isDraw = false;
+    });
+
+    function floodFill(startX, startY) {
+        const w = main.width, h = main.height, imgD = tctx.getImageData(0,0,w,h), data = imgD.data;
+        const startIdx = (Math.floor(startY) * w + Math.floor(startX)) * 4, sR = data[startIdx], sG = data[startIdx+1], sB = data[startIdx+2], tol = 5;
+        const hc = document.createElement('canvas'); hc.width=1; hc.height=1; const hcx = hc.getContext('2d'); hcx.fillStyle = app.penColor; hcx.fillRect(0,0,1,1);
+        const fD = hcx.getImageData(0,0,1,1).data;
+        const match = (i) => Math.abs(data[i]-sR)<=tol && Math.abs(data[i+1]-sG)<=tol && Math.abs(data[i+2]-sB)<=tol;
+        if (Math.abs(fD[0]-sR) <= tol && Math.abs(fD[1]-sG) <= tol && Math.abs(fD[2]-sB) <= tol) return;
+        const stack = [[Math.floor(startX), Math.floor(startY)]];
+        while(stack.length > 0) {
+            let [cx, cy] = stack.pop(), idx = (cy * w + cx) * 4;
+            while(cy >= 0 && match(idx)) { cy--; idx -= w*4; } cy++; idx += w*4;
+            let rL=false, rR=false;
+            while(cy < h && match(idx)) {
+                data[idx]=fD[0]; data[idx+1]=fD[1]; data[idx+2]=fD[2]; data[idx+3]=255;
+                if(cx>0) { if(match(idx-4)) { if(!rL){stack.push([cx-1, cy]); rL=true;} } else if(rL) rL=false; }
+                if(cx<w-1) { if(match(idx+4)) { if(!rR){stack.push([cx+1, cy]); rR=true;} } else if(rR) rR=false; }
+                cy++; idx += w*4;
+            }
+        }
+        tctx.putImageData(imgD, 0, 0); applySmartBorderSmooth(tctx, [{x:startX, y:startY}], 3); pushUndo();
+    }
+
+    function executePicker(c) {
+        const pD = tctx.getImageData(Math.floor(c.x), Math.floor(c.y), 1, 1).data;
+        if (pD[3] === 0) return;
+        const hsl = rgbToHsl(pD[0], pD[1], pD[2]);
+        document.getElementById('slider-hue').value = hsl.h; document.getElementById('slider-light').value = hsl.l; updateColor();
+    }
+
+    function performReflector() { 
+        pushUndo(); const h = document.createElement('canvas'); h.width = main.width; h.height = main.height;
+        const hx = h.getContext('2d'); hx.translate(main.width, 0); hx.scale(-1, 1); hx.drawImage(temp, 0, 0);
+        tctx.clearRect(0,0,temp.width,temp.height); tctx.drawImage(h, 0, 0); toggleOverlay(null); 
+    }
+      function openTextMenu() { toggleOverlay('text'); }
+    function startTextSticker() { textObj.txt = document.getElementById('text-input').value; textObj.font = document.getElementById('text-font').value; if(!textObj.txt && !textObj.img) return; toggleOverlay(null); document.getElementById('ui-transform-bar').style.display = 'flex'; app.activeTool = 'TEXT_PLACE'; drawTextPreview(); }
+    function drawTextPreview() {
+        if(app.activeTool !== 'TEXT_PLACE') return;
+        tctx.clearRect(0, 0, temp.width, temp.height); tctx.save();
+        const cx = (window.innerWidth/2 - app.panX)/app.scale, cy = (window.innerHeight/2 - app.panY)/app.scale;
+        tctx.translate(cx, cy); tctx.rotate(textObj.rot * Math.PI / 180); tctx.scale(textObj.scale * textObj.fX, textObj.scale * textObj.fY);
+        if (textObj.img) tctx.drawImage(textObj.img, -textObj.img.width/2, -textObj.img.height/2);
+        else { tctx.font = `${app.penSize*2}px ${textObj.font}`; tctx.fillStyle = app.penColor; tctx.textAlign="center"; tctx.fillText(textObj.txt, 0, 0); }
+        tctx.restore();
+    }
+    function confirmTextSticker() { const cx = (window.innerWidth/2 - app.panX)/app.scale, cy = (window.innerHeight/2 - app.panY)/app.scale; if (!isInsideZone(cx, cy)) return alert("OUTSIDE ZONE"); document.getElementById('ui-transform-bar').style.display = 'none'; pushUndo(); app.activeTool = null; }
+    function cancelTextSticker() { document.getElementById('ui-transform-bar').style.display = 'none'; tctx.clearRect(0,0,temp.width,temp.height); app.activeTool = null; }
+    function toggleOverlay(id) { document.querySelectorAll('.overlay').forEach(el => el.style.display = 'none'); document.querySelectorAll('.dock-btn').forEach(btn => btn.classList.remove('active-btn')); if (id) { document.getElementById('overlay-' + id).style.display = 'flex'; if(document.getElementById('btn-'+id)) document.getElementById('btn-'+id).classList.add('active-btn'); currentOpenMenu = id; } }
+    function selectTool(btn, tool) { document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active-btn')); btn.classList.add('active-btn'); app.activeTool = tool; toggleOverlay(null); }
+    function pushUndo() { if(app.undo.length >= 10) app.undo.shift(); app.undo.push(temp.toDataURL()); }
+    function performUndo() { if(app.undo.length < 2) return; app.undo.pop(); const img = new Image(); img.src = app.undo[app.undo.length-1]; img.onload = () => { tctx.clearRect(0,0,temp.width,temp.height); tctx.drawImage(img,0,0); }; }
+    function triggerQSave() { mctx.drawImage(temp,0,0); pushUndo(); const data = main.toDataURL('image/jpeg', 0.8); localStorage.setItem('last_session', data); app.vaults[app.vIdx] = data; localStorage.setItem('v'+app.vIdx, data); document.getElementById('vault-img-'+app.vIdx).src = data; app.vIdx = (app.vIdx+1)%2; }
+    function loadVault(i) { const d = localStorage.getItem('v'+i); if(d) { const img = new Image(); img.onload = () => { applyFitMath(img.width, img.height); mctx.drawImage(img,0,0); tctx.drawImage(img,0,0); }; img.src = d; } toggleOverlay(null); }
+    function applySmartBorderSmooth(ctx, p, radius = 2) { const w = ctx.canvas.width; const imgD = ctx.getImageData(0, 0, w, ctx.canvas.height); const data = imgD.data; p.forEach(pt => { const cx = Math.floor(pt.x), cy = Math.floor(pt.y); let r=0,g=0,b=0,c=0; for(let dy=-radius; dy<=radius; dy++){ for(let dx=-radius; dx<=radius; dx++){ const i=((cy+dy)*w+(cx+dx))*4; if(data[i+3]>0){ r+=data[i]; g+=data[i+1]; b+=data[i+2]; c++; } } } if(c>0){ const i=(cy*w+cx)*4; data[i]=r/c; data[i+1]=g/c; data[i+2]=b/c; } }); ctx.putImageData(imgD, 0, 0); }
+    function triggerSave() { const c = document.createElement('canvas'); c.width = main.width; c.height = main.height; const cx = c.getContext('2d'); cx.drawImage(main,0,0); cx.drawImage(temp,0,0); const l = document.createElement('a'); l.download = 'studio69.png'; l.href = c.toDataURL(); l.click(); }
+    document.getElementById('load-file').onchange = (e) => { const r = new FileReader(); r.onload = (ev) => { const img = new Image(); img.onload = () => { applyFitMath(img.width, img.height); mctx.drawImage(img,0,0); tctx.drawImage(img,0,0); pushUndo(); }; img.src = ev.target.result; }; r.readAsDataURL(e.target.files[0]); };
+    document.getElementById('import-file').onchange = (e) => { const r = new FileReader(); r.onload = (ev) => { const img = new Image(); img.onload = () => { textObj.img = img; textObj.rot = -textObj.cRot; let sW = window.innerWidth/app.scale, sH = window.innerHeight/app.scale; textObj.scale = Math.max(sW/img.width, sH/img.height); app.activeTool = 'TEXT_PLACE'; document.getElementById('ui-transform-bar').style.display = 'flex'; toggleOverlay(null); drawTextPreview(); }; img.src = ev.target.result; }; r.readAsDataURL(e.target.files[0]); };
+    window.onload = () => {
+        const last = localStorage.getItem('last_session'); const bg = new Image(); bg.src = last || 'car.png';
+        bg.onload = () => { applyFitMath(bg.width, bg.height); mctx.drawImage(bg,0,0); tctx.drawImage(bg,0,0); pushUndo(); };
+        for(let i=0; i<2; i++) { app.vaults[i] = localStorage.getItem('v'+i); if(app.vaults[i]) document.getElementById('vault-img-'+i).src = app.vaults[i]; }
+        updateColor(); if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');
+    };
+</script></body></html>
+      
